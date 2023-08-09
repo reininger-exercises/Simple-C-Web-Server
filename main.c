@@ -1,9 +1,14 @@
-// Open TCP socket to listen for connections
+// A simple http server.
 
-// Once a connection is made:
+int main(int argc, char[] *args) {
+	// Open TCP socket to listen for connections
 
-	// read from the socket
+	// Once a connection is made:
 
-	// handle the message
+		// read from the socket
 
-	// close the socket
+		// handle the message
+
+		// close the socket
+}
+
