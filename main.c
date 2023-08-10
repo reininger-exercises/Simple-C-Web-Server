@@ -21,15 +21,11 @@ void terminate(char* msg) {
 	exit(1);
 }
 
-int main(int argc, char *args[]) {
-	int connectionSocket;
-	int commSocket;
-	int bufSize = BUFSIZE;
-
-	if ((connectionSocket = socket(PF_INET, SOCK_STREAM, 0)) < 0)
+void initialize(int *connectionSocket) {
+	if ((*connectionSocket = socket(PF_INET, SOCK_STREAM, 0)) < 0)
 		terminate("Unable to create connection socket");
 
-	printf("connection socket fd: %d\n", connectionSocket);
+	printf("connection socket fd: %d\n", *connectionSocket);
 
 	ushort port = DEFAULT_PORT;
 	sockaddr_in address = {
@@ -39,20 +35,48 @@ int main(int argc, char *args[]) {
 	};
 
 	sockaddr* connectionAddress = (sockaddr*) &address;
-	if (bind(connectionSocket, connectionAddress, sizeof(address)) < 0)
+	if (bind(*connectionSocket, connectionAddress, sizeof(address)) < 0)
 		terminate("Unable to bind connection socket");
 	
-	if(listen(connectionSocket, 0) < 0)
+	if(listen(*connectionSocket, 0) < 0)
 		terminate("Unable to listen on connection socket");
+};
+
+int file2buf(FILE* file, char* buf, int bufSize) {
+		memset(buf, 0, bufSize);
+		fseek(file, 0, SEEK_END);
+		long fsize = ftell(file);
+		fseek(file, 0, SEEK_SET);
+		fread(buf, fsize, 1, file);
+		buf[fsize] = 0;
+		return fsize;
+}
+
+int generateHttpResponse(char* msg, int msgSize, char* payload, int payloadSize) {
+		int responseSize = 0;
+		memset(msg, 0, msgSize);
+		responseSize += sprintf(msg + responseSize, "HTTP/1.1 200 OK\r\n");
+		responseSize += sprintf(msg + responseSize, "content-length: %d\r\n", payloadSize);
+		responseSize += sprintf(msg + responseSize, "\r\n");
+		responseSize += sprintf(msg + responseSize, "%s", payload);
+		return responseSize;
+}
+
+int main(int argc, char *args[]) {
+	int connectionSocket;
+
+	initialize(&connectionSocket);
 
 	while (true) {
 		sockaddr clientAddr;
 		uint clientAddrSize = sizeof(clientAddr);
 		int recvMsgSize;
-		char buf[bufSize];
 		char errBuf[ERRBUFSIZE];
 		char *path = "msg.html";
 		FILE *file;
+		int commSocket;
+		int bufSize = BUFSIZE;
+		char buf[bufSize];
 
 		if ((commSocket = accept(connectionSocket, &clientAddr, &clientAddrSize)) < 0)
 			terminate("Unable to accept connection");
@@ -68,28 +92,17 @@ int main(int argc, char *args[]) {
 			terminate(errBuf);
 		}
 
-		// load file into buf
-		memset(buf, 0, bufSize);
-		fseek(file, 0, SEEK_END);
-		long fsize = ftell(file);
-		fseek(file, 0, SEEK_SET);
-		fread(buf, fsize, 1, file);
+		int fsize = file2buf(file, buf, bufSize);
 		fclose(file);
-		buf[fsize] = 0;
 
-		int msgSize = 0;
-		char msg[bufSize];
+		int responseSize;
+		char response[bufSize];
 
-		memset(msg, 0, bufSize);
-		msgSize += sprintf(msg + msgSize, "HTTP/1.1 200 OK\r\n");
-		msgSize += sprintf(msg + msgSize, "content-length: %ld\r\n", fsize);
-		msgSize += sprintf(msg + msgSize, "\r\n");
-		msgSize += sprintf(msg + msgSize, "%s", buf);
-		msg[msgSize] = 0;
+		responseSize = generateHttpResponse(response, bufSize, buf, fsize);
 
-		printf("Message to send:\n%s", msg);
+		printf("Message to send:\n%s", response);
 		
-		int sent = send(commSocket, msg, msgSize, 0);
+		int sent = send(commSocket, response, responseSize, 0);
 		printf("Number of bytes sent: %d\n", sent);
 		close(commSocket);
 	}
