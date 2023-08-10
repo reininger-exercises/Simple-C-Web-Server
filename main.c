@@ -35,6 +35,11 @@ int main(int argc, char *args[]) {
 	}
 	
 	// listen
+	status = listen(connectionFd, 0);
+	if (status == -1) {
+		puts("Unable to listen on connection socket, program will terminate.");
+		exit(1);
+	}
 
 
 	// Once a connection is made:
