@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <netinet/in.h>
 
 #define DEFAULT_PORT 5005
 
@@ -19,9 +20,20 @@ int main(int argc, char *args[]) {
 
 	printf("connection socket fd: %d\n", connectionFd);
 	// bind socket
-	//int port = 
-	//sockaddr_in address = { .sin_family = AF_INET, .sin_port = DEFAULT_PORT, .
+	ushort port = DEFAULT_PORT;
+	struct sockaddr_in address = {
+		.sin_family = AF_INET,
+		.sin_port = htons(port),
+		.sin_addr.s_addr = htonl(INADDR_ANY)
+	};
 
+	struct sockaddr* sockAddress = (struct sockaddr*)&address;
+	int status = bind(connectionFd, sockAddress, sizeof(address));
+	if (status == -1) {
+		puts("Unable to bind connection socket, program will terminate.");
+		exit(1);
+	}
+	
 	// listen
 
 
