@@ -1,82 +1,75 @@
 // A simple http server.
 
-#include <sys/socket.h>
-#include <unistd.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <netinet/in.h>
+#include <stdbool.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
+#define BUFSIZE 8 * 1024
 #define DEFAULT_PORT 5005
+#define ERRBUFSIZE 1024
+
+typedef struct sockaddr_in sockaddr_in;
+typedef struct sockaddr sockaddr;
+typedef unsigned int uint;
+
+void terminate(char* msg) {
+	printf("Error: %s: program will terminate.", msg);
+	exit(1);
+}
 
 int main(int argc, char *args[]) {
-	// Open TCP socket to listen for connections
+	int connectionSocket;
+	int commSocket;
+	int bufSize = BUFSIZE;
 
-	// create socket
-	// for protocol argument, 0 means default (tcp for SOCK_STREAM)
-	int connectionFd = socket(PF_INET, SOCK_STREAM, 0);
-	if (connectionFd == -1) {
-		puts("Unable to create connection socket, program will terminate.");
-		exit(1);
-	}
+	if ((connectionSocket = socket(PF_INET, SOCK_STREAM, 0)) < 0)
+		terminate("Unable to create connection socket");
 
-	printf("connection socket fd: %d\n", connectionFd);
-	// bind socket
+	printf("connection socket fd: %d\n", connectionSocket);
+
 	ushort port = DEFAULT_PORT;
-	struct sockaddr_in address = {
+	sockaddr_in address = {
 		.sin_family = AF_INET,
 		.sin_port = htons(port),
 		.sin_addr.s_addr = htonl(INADDR_ANY)
 	};
 
-	struct sockaddr* sockAddress = (struct sockaddr*)&address;
-	int status = bind(connectionFd, sockAddress, sizeof(address));
-	if (status == -1) {
-		puts("Unable to bind connection socket, program will terminate.");
-		exit(1);
-	}
+	sockaddr* connectionAddress = (sockaddr*) &address;
+	if (bind(connectionSocket, connectionAddress, sizeof(address)) < 0)
+		terminate("Unable to bind connection socket");
 	
-	// listen
-	status = listen(connectionFd, 0);
-	if (status == -1) {
-		puts("Unable to listen on connection socket, program will terminate.");
-		exit(1);
-	}
+	if(listen(connectionSocket, 0) < 0)
+		terminate("Unable to listen on connection socket");
 
-	// connect
-	while (1) {
-		struct sockaddr clientAddr;
-
-		if (status == -1) {
-			puts("Unable to connect, program will terminate.");
-			exit(1);
-		}
-
-		unsigned int clientAddrSize = sizeof(clientAddr);
-		int commSocket = accept(connectionFd, &clientAddr, &clientAddrSize);
-		if (commSocket == -1) {
-			puts("Unable to accept connection, program will terminate.");
-			exit(1);
-		}
-
-		char buf[1024 * 8];
-		memset(buf, 0, 1024 * 8);
-		int recvMsgSize = recv(commSocket, buf, 1024 * 8, 0);
-		if (recvMsgSize < 0) {
-			puts("Failed to read from socket. Connection will terminate.");
-			continue;
-		}
-		puts("Message received from client:");
-		printf("%s", buf);
-
+	while (true) {
+		sockaddr clientAddr;
+		uint clientAddrSize = sizeof(clientAddr);
+		int recvMsgSize;
+		char buf[bufSize];
+		char errBuf[ERRBUFSIZE];
 		char *path = "msg.html";
-		FILE *file = fopen(path, "r");
-		if (!file) {
-			printf("Could not open %s. Connection will terminate.\n", path);
-			continue;
+		FILE *file;
+
+		if ((commSocket = accept(connectionSocket, &clientAddr, &clientAddrSize)) < 0)
+			terminate("Unable to accept connection");
+
+		memset(buf, 0, bufSize);
+		if ((recvMsgSize = recv(commSocket, buf, bufSize, 0)) < 0)
+			terminate("Failed to read from socket");
+
+		printf("Message received from client:\n\n%s", buf);
+
+		if ((file = fopen(path, "r")) == 0) {
+			sprintf(errBuf, "Could not open %s", path);
+			terminate(errBuf);
 		}
 
-		memset(buf, 0, 1024 * 8);
+		// load file into buf
+		memset(buf, 0, bufSize);
 		fseek(file, 0, SEEK_END);
 		long fsize = ftell(file);
 		fseek(file, 0, SEEK_SET);
@@ -85,9 +78,9 @@ int main(int argc, char *args[]) {
 		buf[fsize] = 0;
 
 		int msgSize = 0;
+		char msg[bufSize];
 
-		char msg[1024 * 8];
-		memset(msg, 0, 1024 * 8);
+		memset(msg, 0, bufSize);
 		msgSize += sprintf(msg + msgSize, "HTTP/1.1 200 OK\r\n");
 		msgSize += sprintf(msg + msgSize, "content-length: %ld\r\n", fsize);
 		msgSize += sprintf(msg + msgSize, "\r\n");
@@ -100,13 +93,5 @@ int main(int argc, char *args[]) {
 		printf("Number of bytes sent: %d\n", sent);
 		close(commSocket);
 	}
-
-	// Once a connection is made:
-
-		// read from the socket
-
-		// handle the message
-
-		// close the socket
 }
 
